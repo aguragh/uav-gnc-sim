@@ -7,9 +7,7 @@ under disturbance. All parameters are modeled on the Bitcraze Crazyflie 2.1 dron
 to teach programming. 
 
 ## Live Demo
-**[Try it live →](#)** *(fill in once deployed)*
-![simulator demo](docs/img/demo.gif)
-*(drop a screenshot/GIF at `docs/img/demo.gif` — path is already wired up above)*
+Try the sim live at uav-wind-sim.fly.dev
 
 Pick between either maintaining hover or one of the preset trajectories, dial in
 mean wind speed, direction and turbulence intensity, and run the simulation. Users
