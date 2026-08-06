@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>UAV Wind-Disturbance Rejection Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%; overflow: hidden;
+      background: #e4e8ec; font-family: 'Inter', system-ui, sans-serif; color: #5a6472;
+      display: flex; flex-direction: column;
+    }
+    .mono { font-family: 'JetBrains Mono', 'Courier New', monospace; }
+
+    #scene-wrap { position: relative; flex: 0 0 75vh; }
+    #scene-wrap canvas { display: block; }
+
+    #tabs {
+      position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 1px;
+      background: #ffffff; border: 1px solid #b8c4cc;
+      border-radius: 7px; padding: 3px; z-index: 10;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    }
+    .tab-btn {
+      padding: 5px 20px; border: none; background: transparent;
+      color: #7a8896; font-size: 11px;
+      border-radius: 5px; cursor: pointer; transition: all 0.15s; font-weight: 500;
+      line-height: 1;
+    }
+    .tab-btn.active { background: rgba(0,100,200,0.10); color: #0064c8; }
+    .tab-btn:hover:not(.active) { color: #4a5868; }
+
+    #hud {
+      position: absolute; top: 16px; left: 16px;
+      font-size: 11px; line-height: 2;
+      pointer-events: none; color: #6a7888;
+    }
+    .val { color: #1c2630; font-size: 10.5px; }
+    .err { color: #c02828; font-size: 10.5px; }
+
+    #custom-panel { top: 16px; right: 286px; width: 186px; display: none; }
+    .cexpr {
+      width: 100%; background: #f0f2f4; color: #1c2630;
+      border: 1px solid #ced4da; border-radius: 5px;
+      padding: 3px 6px; font-size: 10px;
+      margin-bottom: 7px; box-sizing: border-box;
+    }
+    .cexpr:focus { outline: none; border-color: #0064c8; }
+
+    #vec-hud {
+      position: absolute; bottom: 16px; right: 16px;
+      font-size: 10px; line-height: 1.85; text-align: right;
+      pointer-events: none; font-family: 'JetBrains Mono', monospace;
+    }
+    #vec-hud .vh-label { font-size: 9px; margin-bottom: 1px;
+                         font-weight: 500; color: #2a3440; }
+    .wc { color: #3a7cc0; }
+    .tc { color: #e07030; }
+
+    .ctrl-panel {
+      position: absolute; top: 16px; right: 16px;
+      background: #ffffff; border: 1px solid #b8c4cc;
+      border-radius: 8px; padding: 12px 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.13);
+      border-top: 3px solid #0064c8;
+    }
+    .ctrl-panel h4 { color: #1c2630; font-size: 11px; margin-bottom: 11px;
+                     font-weight: 500; }
+
+    #sim-panel { width: 228px; transition: opacity 0.15s; }
+    .ctrl-row { margin-bottom: 9px; }
+    .ctrl-row label {
+      display: flex; justify-content: space-between; align-items: center;
+      color: #5a6472; margin-bottom: 3px; font-size: 11px;
+    }
+    .vl { color: #1c2630; font-size: 10px; }
+    select {
+      width: 100%; background: #f4f6f8; color: #1c2630;
+      border: 1px solid #ced4da; border-radius: 5px;
+      padding: 4px 6px; font-size: 11px;
+    }
+    input[type=range] { width: 100%; accent-color: #0064c8; height: 3px; }
+    button {
+      width: 100%; margin-top: 5px; padding: 6px;
+      background: #f0f2f5; border: 1px solid #ced4da;
+      color: #4a5868; border-radius: 6px; font-size: 11px;
+      cursor: pointer; transition: background 0.12s; font-weight: 500;
+    }
+    button:hover { background: #e4e8ec; color: #1c2630; }
+    .btn-red { border-color: #e0c0c0; color: #a03030; background: #faf4f4; }
+    .btn-red:hover { background: #f5e8e8; color: #c02828; }
+    .btn-pause { border-color: #d8c880; color: #7a6010; background: #faf8ee; }
+    .btn-pause:hover { background: #f5f0d8; color: #5a4808; }
+
+    #tune-panel {
+      width: 262px;
+      max-height: calc(75vh - 32px);
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #ced4da transparent;
+      opacity: 0; pointer-events: none; transition: opacity 0.15s;
+    }
+    #tune-panel.active { opacity: 1; pointer-events: auto; }
+    .tg-hdr {
+      color: #1c2630; font-size: 10px;
+      margin: 12px 0 5px; padding-top: 9px;
+      border-top: 1px solid #e0e4e8; font-weight: 500;
+      cursor: pointer; user-select: none;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .tg-hdr::after { content: '▾'; font-size: 9px; color: #8a9aaa; transition: transform 0.15s; }
+    .tg-hdr.collapsed::after { transform: rotate(-90deg); }
+    .tg-hdr:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+    .tg-body { overflow: hidden; transition: max-height 0.18s ease; max-height: 400px; }
+    .tg-body.collapsed { max-height: 0; }
+    .trow { margin-bottom: 5px; font-size: 10px; }
+    .trow label {
+      display: flex; justify-content: space-between; align-items: center;
+      color: #5a6472; margin-bottom: 2px; font-size: 11px;
+    }
+    .trow label em { color: #1c2630; font-style: normal; min-width: 52px; text-align: right;
+                     font-size: 10px; }
+    .trow input[type=range] { height: 2px; }
+    .trow select { font-size: 10px; padding: 3px 5px; }
+    #tune-btns { display: flex; gap: 4px; margin: 6px 0; }
+    #tune-btns button { margin: 0; padding: 5px 0; font-size: 10px; }
+
+    .m-grid {
+      display: grid; grid-template-columns: repeat(5, 1fr);
+      gap: 4px; margin: 8px 0; text-align: center;
+    }
+    .m-grid .mv { color: #1c2630; font-size: 11px; display: block;
+                  font-weight: 400; }
+    .m-grid .ml { color: #5a6472; font-size: 9px; font-weight: 500; }
+
+    #gain-reset-btns { display: flex; gap: 4px; margin-top: 8px; }
+    #gain-reset-btns button { margin: 0; padding: 5px 0; font-size: 10px; }
+
+    #graph-bar {
+      flex: 1; display: flex;
+      background: #e0e4e8; border-top: 2px solid #b8c4cc;
+      min-height: 0;
+    }
+    .gcell {
+      flex: 1; display: flex; flex-direction: column;
+      padding: 8px 14px 6px; min-width: 0;
+      border-right: 1px solid rgba(0,0,0,0.12);
+    }
+    .gcell:last-child { border-right: none; }
+    .gcell-hdr {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 5px; flex-shrink: 0;
+    }
+    .gcell-hdr span { color: #2a3440; font-size: 10px; font-weight: 500; }
+    .gcell-hdr em   { color: rgba(30,40,55,0.45); font-size: 9px; font-style: normal; }
+    .gcell canvas   { flex: 1; display: block; min-height: 0; width: 100%; overflow: hidden; }
+
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; flex-shrink: 0; }
+    .leg-item {
+      display: flex; align-items: center; gap: 3px;
+      cursor: pointer; opacity: 0.3; transition: opacity 0.12s;
+      font-size: 9px; user-select: none;
+    }
+    .leg-item.on { opacity: 1; }
+    .leg-swatch { width: 9px; height: 9px; border-radius: 1px; flex-shrink: 0; }
+
+    #vcube-wrap {
+      position: absolute; bottom: 16px; left: 16px;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      pointer-events: auto;
+    }
+    #view-cube {
+      width: 80px; height: 80px; display: block;
+      border-radius: 6px; cursor: pointer;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.15);
+    }
+    #view-home {
+      width: auto; margin: 0; padding: 3px 10px;
+      font-size: 12px; font-weight: 400;
+      background: rgba(255,255,255,0.82); border: 1px solid #ced4da;
+      color: #4a5868; border-radius: 5px; cursor: pointer;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.10);
+      transition: background 0.12s;
+    }
+    #view-home:hover { background: rgba(255,255,255,0.97); color: #1c2630; }
+  </style>
+</head>
+<body>
+
+<div id="scene-wrap">
+  <div id="hud">
+    pos x:<span class="val" id="hx"> —</span>
+        y:<span class="val" id="hy"> —</span>
+        z:<span class="val" id="hz"> —</span> m<br>
+    |e| <span class="err" id="hemag"> —</span> m
+    &nbsp; T: <span class="val" id="hT"> —</span> N<br>
+    t: <span class="val" id="ht"> —</span> s
+  </div>
+
+  <div id="custom-panel" class="ctrl-panel">
+    <h4>Custom path</h4>
+    <div style="font-size:8.5px;color:#5a6472;margin-bottom:9px;line-height:1.55">
+      vars: <span style="color:#0064c8">t</span> &nbsp;
+      fns: <span style="color:#0064c8">sin cos tan sqrt abs exp log pi</span>
+    </div>
+    <div style="font-size:9px;color:#5a6472;margin-bottom:2px">x(t) =</div>
+    <input class="cexpr" id="cx-expr" type="text" value="sin(t) + 2*sin(2*t)" spellcheck="false">
+    <div style="font-size:9px;color:#5a6472;margin-bottom:2px">y(t) =</div>
+    <input class="cexpr" id="cy-expr" type="text" value="cos(t) - 2*cos(2*t)" spellcheck="false">
+    <div style="font-size:9px;color:#5a6472;margin-bottom:2px">z(t) =</div>
+    <input class="cexpr" id="cz-expr" type="text" value="2 + 0.5*sin(3*t)" spellcheck="false">
+    <div style="display:flex;align-items:center;gap:6px;margin:6px 0 10px">
+      <span style="font-size:9px;color:#5a6472">T (s)</span>
+      <input type="number" id="ct-period" value="6.28" step="0.5" min="1"
+        style="width:58px;background:#f0f2f5;border:1px solid #ced4da;
+               color:#1c2630;font-size:9px;padding:2px 5px;border-radius:3px;font-family:inherit">
+    </div>
+    <button id="custom-apply">▶ Apply</button>
+    <div id="custom-err" style="display:none;font-size:8px;color:#ff6b7a;margin-top:6px;line-height:1.4"></div>
+  </div>
+
+  <div id="vcube-wrap">
+    <canvas id="view-cube" width="80" height="80"></canvas>
+    <button id="view-home" title="Reset view">⌂</button>
+  </div>
+
+  <div id="vec-hud">
+    <div class="vh-label wc">Wind (m/s)</div>
+    x <span class="wc" id="vhwx">—</span>
+    &nbsp;y <span class="wc" id="vhwy">—</span>
+    &nbsp;z <span class="wc" id="vhwz">—</span><br>
+    <div class="vh-label tc" style="margin-top:5px">Thrust (N)</div>
+    x <span class="tc" id="vhtx">—</span>
+    &nbsp;y <span class="tc" id="vhty">—</span>
+    &nbsp;z <span class="tc" id="vhtz">—</span>
+  </div>
+
+  <div id="tabs">
+    <button class="tab-btn active" id="tab-sim">Sim</button>
+    <button class="tab-btn"        id="tab-tune">Tune</button>
+  </div>
+
+  <div id="sim-panel" class="ctrl-panel">
+    <h4>Controls</h4>
+    <div class="ctrl-row">
+      <label>Path</label>
+      <select id="s-path"><option selected>Hover</option><option>Circle</option>
+        <option>Figure-eight</option><option>Spiral</option>
+        <option>Rose</option><option>Lissajous</option><option>Trefoil</option>
+        <option>Custom</option></select>
+    </div>
+    <div class="ctrl-row">
+      <label>Wind speed <span class="vl" id="s-lbl-ws">3.0 m/s</span></label>
+      <input type="range" id="s-wind-speed" min="0" max="8" step="0.1" value="3.0">
+    </div>
+    <div class="ctrl-row">
+      <label>Wind dir <span class="vl" id="s-lbl-wd">45°</span></label>
+      <input type="range" id="s-wind-dir" min="0" max="360" step="5" value="45">
+    </div>
+    <div class="ctrl-row">
+      <label>Turbulence σ <span class="vl" id="s-lbl-tu">1.5</span></label>
+      <input type="range" id="s-turbulence" min="0" max="4" step="0.1" value="1.5">
+    </div>
+    <button id="s-play" class="btn-pause">▶ Play</button>
+    <button id="s-reset">↺ Reset</button>
+    <button id="s-gust" class="btn-red">∿ Fire gust</button>
+    <div style="display:flex;align-items:center;gap:5px;margin-top:6px;flex-wrap:nowrap">
+      <input type="checkbox" id="s-cont-gust" style="accent-color:#ff6b7a;width:12px;height:12px;flex-shrink:0;cursor:pointer">
+      <span style="font-size:9px;color:#5a6472;white-space:nowrap;cursor:pointer" onclick="document.getElementById('s-cont-gust').click()">Continuous gusts</span>
+      <span style="font-size:9px;color:#5a6472;margin-left:auto;white-space:nowrap">every</span>
+      <input type="number" id="s-gust-period" min="1.5" max="30" step="0.5" value="2.2"
+             style="width:36px;background:#f0f2f5;border:1px solid #ced4da;color:#1c2630;font-size:9px;padding:2px 4px;border-radius:3px;text-align:center;font-family:inherit;flex-shrink:0">
+      <span style="font-size:9px;color:#5a6472">s</span>
+    </div>
+  </div>
+
+  <div id="tune-panel" class="ctrl-panel">
+    <h4>Tuner</h4>
+
+    <div class="trow">
+      <label>Path</label>
+      <select id="t-path"><option selected>Hover</option><option>Circle</option>
+        <option>Figure-eight</option><option>Spiral</option>
+        <option>Rose</option><option>Lissajous</option><option>Trefoil</option>
+        <option>Custom</option></select>
+    </div>
+    <div class="trow">
+      <label>Wind <em id="t-lbl-ws">3.0 m/s</em></label>
+      <input type="range" id="t-wind-speed" min="0" max="8" step="0.1" value="3.0">
+    </div>
+    <div class="trow">
+      <label>Dir <em id="t-lbl-wd">45°</em></label>
+      <input type="range" id="t-wind-dir" min="0" max="360" step="5" value="45">
+    </div>
+    <div class="trow">
+      <label>Turbulence σ <em id="t-lbl-tu">1.5</em></label>
+      <input type="range" id="t-turbulence" min="0" max="4" step="0.1" value="1.5">
+    </div>
+
+    <div id="tune-btns">
+      <button id="play-btn" class="btn-pause">▶ Play</button>
+      <button id="t-reset" >↺ Reset</button>
+      <button id="t-gust"  class="btn-red">∿ Gust</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;flex-wrap:nowrap">
+      <input type="checkbox" id="t-cont-gust" style="accent-color:#ff6b7a;width:11px;height:11px;flex-shrink:0;cursor:pointer">
+      <span style="font-size:9px;color:#5a6472;white-space:nowrap;cursor:pointer" onclick="document.getElementById('t-cont-gust').click()">Continuous gusts</span>
+      <span style="font-size:9px;color:#5a6472;margin-left:auto;white-space:nowrap">every</span>
+      <input type="number" id="t-gust-period" min="1.5" max="30" step="0.5" value="2.2"
+             style="width:36px;background:#f0f2f5;border:1px solid #ced4da;color:#1c2630;font-size:9px;padding:2px 4px;border-radius:3px;text-align:center;font-family:inherit;flex-shrink:0">
+      <span style="font-size:9px;color:#5a6472">s</span>
+    </div>
+
+    <div id="gains-section"></div>
+
+    <div class="tg-hdr" id="hdr-metrics">Metrics</div>
+    <div class="tg-body" id="body-metrics">
+      <div class="m-grid">
+        <div><span class="mv" id="m-t">—</span><span class="ml">t (s)</span></div>
+        <div><span class="mv" id="m-rms">—</span><span class="ml">RMS</span></div>
+        <div><span class="mv" id="m-peak">—</span><span class="ml">peak</span></div>
+        <div><span class="mv" id="m-emag">—</span><span class="ml">|e|</span></div>
+        <div><span class="mv" id="m-T">—</span><span class="ml">T (N)</span></div>
+      </div>
+    </div>
+    <div class="tg-hdr" id="hdr-laplog" style="margin-top:10px">Lap log</div>
+    <div class="tg-body" id="body-laplog">
+      <div id="lap-log" style="font-size:9px;line-height:1.7;color:#5a6472">—</div>
+    </div>
+
+    <div id="gain-reset-btns">
+      <button id="reset-tuned-btn">↺ Hand-tuned</button>
+      <button id="reset-analytic-btn">↺ Analytical</button>
+    </div>
+  </div>
+</div>
+
+<div id="graph-bar">
+  <div class="gcell">
+    <div class="gcell-hdr"><span>Position &amp; attitude error</span><em id="lbl-axes"></em></div>
+    <div class="legend" id="leg-axes"></div>
+    <canvas id="cv-axes"></canvas>
+  </div>
+  <div class="gcell">
+    <div class="gcell-hdr"><span>|e| magnitude</span><em id="lbl-mag"></em></div>
+    <div class="legend" id="leg-mag"></div>
+    <canvas id="cv-mag"></canvas>
+  </div>
+  <div class="gcell">
+    <div class="gcell-hdr"><span>Thrust</span><em id="lbl-thrust"></em></div>
+    <div class="legend" id="leg-thrust"></div>
+    <canvas id="cv-thrust"></canvas>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+'use strict';
+
+const wsUrl = `${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws`;
+let ws, sim = null;
+function connect() {
+  ws = new WebSocket(wsUrl);
+  ws.onopen    = () => {};
+  ws.onclose   = () => { setTimeout(connect, 2000); };
+  ws.onerror   = () => ws.close();
+  ws.onmessage = e  => { sim = JSON.parse(e.data); };
+}
+connect();
+function send(obj) { if (ws && ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
+
+const TUNED_GAINS = { Kp_xy:2.7, Ki_xy:2.15, Kd_xy:2.0,
+              Kp_z:4.0,  Ki_z:1.6,   Kd_z:4.0,
+              Kp_att:3.15e-3, Kd_att:2.94e-4 };
+
+// Pole placement on the linearized double-integrator plant, zeta=1/sqrt(2),
+// 3s position settling time, attitude loop placed 8x faster -- same
+// derivation as python/validate.py's analytic_gains(), kept in sync by hand.
+const ANALYTIC_GAINS = { Kp_xy:3.5556, Ki_xy:0.6704, Kd_xy:2.6667,
+              Kp_z:3.5556,  Ki_z:0.6704, Kd_z:2.6667,
+              Kp_att:3.1858e-3, Kd_att:2.987e-4 };
+
+let gains = { ...TUNED_GAINS };
+
+const SLIDERS = [
+  { label:'Position x/y', rows:[
+    { key:'Kp_xy',  min:0.1,  max:8.0,  step:0.05, dp:2, lbl:'Kp' },
+    { key:'Ki_xy',  min:0.0,  max:4.0,  step:0.05, dp:2, lbl:'Ki' },
+    { key:'Kd_xy',  min:0.0,  max:8.0,  step:0.05, dp:2, lbl:'Kd' },
+  ]},
+  { label:'Altitude z', rows:[
+    { key:'Kp_z',   min:0.1,  max:12.0, step:0.05, dp:2, lbl:'Kp' },
+    { key:'Ki_z',   min:0.0,  max:6.0,  step:0.05, dp:2, lbl:'Ki' },
+    { key:'Kd_z',   min:0.0,  max:12.0, step:0.05, dp:2, lbl:'Kd' },
+  ]},
+  { label:'Attitude', rows:[
+    { key:'Kp_att', min:5e-4, max:1e-2, step:5e-5, dp:5, lbl:'Kp' },
+    { key:'Kd_att', min:1e-5, max:2e-3, step:1e-5, dp:6, lbl:'Kd' },
+  ]},
+];
+
+const gainsSec = document.getElementById('gains-section');
+SLIDERS.forEach((group, gi) => {
+  const hdr  = document.createElement('div');
+  const body = document.createElement('div');
+  hdr.className  = 'tg-hdr'; hdr.textContent = group.label;
+  body.className = 'tg-body';
+  gainsSec.appendChild(hdr);
+  gainsSec.appendChild(body);
+  group.rows.forEach(s => {
+    body.insertAdjacentHTML('beforeend', `
+      <div class="trow">
+        <label>${s.lbl} <em id="lv-${s.key}">${gains[s.key].toFixed(s.dp)}</em></label>
+        <input type="range" id="sl-${s.key}" min="${s.min}" max="${s.max}" step="${s.step}" value="${gains[s.key]}">
+      </div>`);
+  });
+  hdr.addEventListener('click', () => {
+    hdr.classList.toggle('collapsed');
+    body.classList.toggle('collapsed');
+  });
+});
+
+function initSliders() {
+  SLIDERS.forEach(g => g.rows.forEach(s => {
+    const el = document.getElementById(`sl-${s.key}`);
+    if (!el) return;
+    el.value = gains[s.key];
+    document.getElementById(`lv-${s.key}`).textContent = gains[s.key].toFixed(s.dp);
+  }));
+}
+
+SLIDERS.forEach(g => g.rows.forEach(s => {
+  document.getElementById(`sl-${s.key}`).addEventListener('input', e => {
+    gains[s.key] = parseFloat(e.target.value);
+    document.getElementById(`lv-${s.key}`).textContent = gains[s.key].toFixed(s.dp);
+    send({ cmd:'set_gains', ...gains });
+  });
+}));
+
+fetch('/gains').then(r => r.json()).then(g => { Object.assign(gains, g); Object.assign(TUNED_GAINS, g); initSliders(); })
+               .catch(() => initSliders());
+
+let currentTab = 'sim';
+const simPanel  = document.getElementById('sim-panel');
+const tunePanel = document.getElementById('tune-panel');
+
+document.getElementById('tab-sim').addEventListener('click', () => {
+  currentTab = 'sim';
+  document.getElementById('tab-sim').classList.add('active');
+  document.getElementById('tab-tune').classList.remove('active');
+  simPanel.style.opacity = '1'; simPanel.style.pointerEvents = 'auto';
+  tunePanel.classList.remove('active');
+});
+document.getElementById('tab-tune').addEventListener('click', () => {
+  currentTab = 'tune';
+  document.getElementById('tab-tune').classList.add('active');
+  document.getElementById('tab-sim').classList.remove('active');
+  simPanel.style.opacity = '0'; simPanel.style.pointerEvents = 'none';
+  tunePanel.classList.add('active');
+});
+
+let simPaused = true;
+
+function setPlayState(paused) {
+  simPaused = paused;
+  send({ cmd: simPaused ? 'pause' : 'resume' });
+  const txt = simPaused ? '▶ Play' : '⏸ Pause';
+  document.getElementById('play-btn').textContent = txt;
+  document.getElementById('s-play').textContent   = txt;
+}
+
+document.getElementById('play-btn').addEventListener('click', () => setPlayState(!simPaused));
+document.getElementById('s-play').addEventListener('click',   () => setPlayState(!simPaused));
+
+const sceneWrap = document.getElementById('scene-wrap');
+const renderer  = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+sceneWrap.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xd8dde3);
+scene.fog = new THREE.FogExp2(0xd8dde3, 0.022);
+
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 600);
+camera.position.set(6, 6, 9);
+camera.lookAt(0, 2, 0);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.minDistance = 1.5;
+controls.maxDistance = 80;
+controls.target.set(0, 2, 0);
+controls.update();
+
+function resizeScene() {
+  const w = sceneWrap.clientWidth, h = sceneWrap.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+resizeScene();
+window.addEventListener('resize', resizeScene);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+const sun = new THREE.DirectionalLight(0xffffff, 0.8); sun.position.set(6,12,8); scene.add(sun);
+const fill= new THREE.DirectionalLight(0xc8d8e8, 0.3); fill.position.set(-5,3,-4); scene.add(fill);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(1200,1200),
+  new THREE.MeshLambertMaterial({ color: 0xc8cdd4 }));
+ground.rotation.x = -Math.PI/2; scene.add(ground);
+const gridFine   = new THREE.GridHelper(80, 40, 0xb0b8c2, 0xb8c0ca); gridFine.position.y   = 0.01; scene.add(gridFine);
+const gridCoarse  = new THREE.GridHelper(80,  8, 0x9aa4ae, 0x9aa4ae); gridCoarse.position.y = 0.01; scene.add(gridCoarse);
+
+function gndLine(x1,z1,x2,z2,col) {
+  const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x1,.003,z1),new THREE.Vector3(x2,.003,z2)]);
+  scene.add(new THREE.Line(g,new THREE.LineBasicMaterial({color:col,transparent:true,opacity:0.5})));
+}
+gndLine(-22,0, 22,0, 0xcc8888);
+gndLine(0,-22, 0,22, 0x88bb99);
+
+function makeLabel(txt, hex) {
+  const cv=document.createElement('canvas'); cv.width=96; cv.height=52;
+  const cx=cv.getContext('2d');
+  cx.font='bold 42px monospace'; cx.fillStyle='#'+hex.toString(16).padStart(6,'0');
+  cx.fillText(txt,6,42);
+  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true}));
+  spr.scale.set(0.7,0.37,1); return spr;
+}
+const AO=new THREE.Vector3(0,.05,0), AL=1.8, AH=0.35, AW=0.17;
+scene.add(new THREE.ArrowHelper(new THREE.Vector3(1,0,0), AO,AL,0xcc3333,AH,AW));
+scene.add(new THREE.ArrowHelper(new THREE.Vector3(0,1,0), AO,AL,0x3377cc,AH,AW));
+scene.add(new THREE.ArrowHelper(new THREE.Vector3(0,0,-1),AO,AL,0x33aa55,AH,AW));
+const lX=makeLabel('X',0xcc3333); lX.position.set(AL+.3,.1,0); scene.add(lX);
+const lZ=makeLabel('Z',0x3377cc); lZ.position.set(0,AL+.3,0); scene.add(lZ);
+const lY=makeLabel('Y',0x33aa55); lY.position.set(-.1,.1,-AL-.3); scene.add(lY);
+
+(function(){
+  const vg=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(0,8.5,0)]);
+  scene.add(new THREE.Line(vg,new THREE.LineBasicMaterial({color:0x8090a0,transparent:true,opacity:0.5})));
+  for(let h=1;h<=8;h++){
+    const tg=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-.15,h,0),new THREE.Vector3(.15,h,0)]);
+    scene.add(new THREE.Line(tg,new THREE.LineBasicMaterial({color:0x8090a0,transparent:true,opacity:0.45})));
+    const lbl=makeLabel(`${h}m`,0x7888a0); lbl.scale.set(0.45,0.24,1);
+    lbl.position.set(.45,h,0); scene.add(lbl);
+  }
+})();
+
+const drone=new THREE.Group();
+drone.add(new THREE.Mesh(new THREE.BoxGeometry(.16,.055,.16),
+  new THREE.MeshLambertMaterial({color:0x303438})));
+const armMat=new THREE.MeshLambertMaterial({color:0x202428});
+drone.add(new THREE.Mesh(new THREE.BoxGeometry(.58,.022,.025),armMat));
+drone.add(new THREE.Mesh(new THREE.BoxGeometry(.025,.022,.58),armMat));
+const podGeo=new THREE.CylinderGeometry(.027,.027,.042,8);
+const podMat=new THREE.MeshLambertMaterial({color:0x181c20});
+[[.29,0,0],[-.29,0,0],[0,0,.29],[0,0,-.29]].forEach(([px,py,pz])=>{
+  const p=new THREE.Mesh(podGeo,podMat); p.position.set(px,py,pz); drone.add(p);
+});
+const rotorGeo=new THREE.CylinderGeometry(.095,.095,.006,20);
+const rotorMat=new THREE.MeshLambertMaterial({color:0x404448,transparent:true,opacity:.6});
+const rotors=[];
+[[.29,.028,0],[-.29,.028,0],[0,.028,.29],[0,.028,-.29]].forEach((pos,i)=>{
+  const r=new THREE.Mesh(rotorGeo,rotorMat); r.position.set(...pos);
+  drone.add(r); rotors.push({mesh:r,dir:i%2===0?1:-1});
+});
+drone.scale.setScalar(1.8);
+drone.position.set(2.5,2,0);
+scene.add(drone);
+
+const shadowDisc=new THREE.Mesh(new THREE.CircleGeometry(.2,16),
+  new THREE.MeshBasicMaterial({color:0,transparent:true,opacity:.18}));
+shadowDisc.rotation.x=-Math.PI/2; shadowDisc.position.y=.015; scene.add(shadowDisc);
+
+const windArrow = new THREE.ArrowHelper(
+  new THREE.Vector3(1,0,0), new THREE.Vector3(0,2,0), 0, 0x3a7cc0, 0.22, 0.11);
+windArrow.line.material.transparent = true;
+windArrow.cone.material.transparent = true;
+scene.add(windArrow);
+
+const thrustArrow = new THREE.ArrowHelper(
+  new THREE.Vector3(0,1,0), new THREE.Vector3(0,2,0), 0, 0xe07030, 0.22, 0.11);
+thrustArrow.line.material.transparent = true;
+thrustArrow.cone.material.transparent = true;
+scene.add(thrustArrow);
+
+const spMesh=new THREE.Mesh(new THREE.TorusGeometry(.17,.02,8,32),
+  new THREE.MeshBasicMaterial({color:0x4488cc,transparent:true,opacity:.7}));
+spMesh.rotation.x=Math.PI/2; scene.add(spMesh);
+
+const polePts=[new THREE.Vector3(0,0,0),new THREE.Vector3(0,0,0)];
+const poleGeo=new THREE.BufferGeometry().setFromPoints(polePts);
+scene.add(new THREE.Line(poleGeo,new THREE.LineBasicMaterial({color:0x4488cc,transparent:true,opacity:.35})));
+
+function s3(x,y,z){return new THREE.Vector3(x,z,-y);}
+
+const PATH_R=2.5, FE_R=2.5;
+let pathObj=null;
+function buildPath(key){
+  if(pathObj){scene.remove(pathObj);pathObj.geometry.dispose();pathObj=null;}
+  const pts=[],N=250;
+  if(key==='Circle'){
+    for(let i=0;i<=N;i++){const a=(i/N)*2*Math.PI; pts.push(s3(PATH_R*Math.cos(a),PATH_R*Math.sin(a),2));}
+  }else if(key==='Figure-eight'){
+    for(let i=0;i<=N;i++){const th=(i/N)*2*Math.PI; pts.push(s3(FE_R*Math.sin(th),FE_R*Math.sin(2*th),2));}
+  }else if(key==='Rose'){
+    const k=3,R=2.0,zA=0.8,om=0.15,T=2*Math.PI/om;
+    for(let i=0;i<=400;i++){const t=(i/400)*T,th=om*t,r=R*Math.cos(k*th);
+      pts.push(s3(r*Math.cos(th),r*Math.sin(th),2+zA*Math.sin(k*th)));}
+  }else if(key==='Lissajous'){
+    const Rx=2.5,Ry=2.5,Rz=1.2,om=0.3,T=2*Math.PI/om;
+    for(let i=0;i<=350;i++){const t=(i/350)*T;
+      pts.push(s3(Rx*Math.sin(om*t),Ry*Math.sin(2*om*t+Math.PI/4),2+Rz*Math.sin(3*om*t)));}
+  }else if(key==='Trefoil'){
+    const R=0.75,zA=0.7,om=0.3,T=2*Math.PI/om;
+    for(let i=0;i<=350;i++){const th=om*(i/350)*T;
+      pts.push(s3(R*(Math.sin(th)+2*Math.sin(2*th)),R*(Math.cos(th)-2*Math.cos(2*th)),2+zA*Math.sin(3*th)));}
+  }else if(key==='Spiral'){
+    const R=1.5,om=0.4,z0=1.0,cr=0.1,zR=2.0,T=zR/cr;
+    for(let i=0;i<=400;i++){const t=(i/400)*T;
+      pts.push(s3(R*Math.cos(om*t),R*Math.sin(om*t),z0+t*cr));}
+  }
+  if(pts.length<2)return;
+  const closed=key==='Circle'||key==='Figure-eight'||key==='Rose'||key==='Lissajous'||key==='Trefoil';
+  const curve=new THREE.CatmullRomCurve3(pts,closed,'catmullrom',.1);
+  const geo=new THREE.TubeGeometry(curve,closed?300:pts.length*4,.024,8,closed);
+  pathObj=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:0x4488cc,transparent:true,opacity:.35}));
+  scene.add(pathObj);
+}
+buildPath('Hover');
+
+const trailPts=[], trailGeo=new THREE.BufferGeometry();
+const trailLine=new THREE.Line(trailGeo,
+  new THREE.LineDashedMaterial({color:0x3a6888,dashSize:.09,gapSize:.06,transparent:true,opacity:.55}));
+scene.add(trailLine);
+
+const GRAPH_LEN=900;
+const histEx=new Float32Array(GRAPH_LEN), histEy=new Float32Array(GRAPH_LEN),
+      histEz=new Float32Array(GRAPH_LEN), histEm=new Float32Array(GRAPH_LEN),
+      histT =new Float32Array(GRAPH_LEN),
+      histPhi=new Float32Array(GRAPH_LEN),histTh=new Float32Array(GRAPH_LEN),
+      histPsi=new Float32Array(GRAPH_LEN);
+let histHead=0, histCount=0, yMaxAxes=.1, yMaxMag=.1, peakEmag=0;
+let totalSamples=0;
+
+const LAP_PERIODS = {
+  'Circle':       2*Math.PI/0.4,
+  'Figure-eight': 2*Math.PI/0.4,
+  'Spiral':       2*Math.PI/0.4,
+  'Rose':         2*Math.PI/0.15,
+  'Lissajous':    2*Math.PI/0.3,
+  'Trefoil':      2*Math.PI/0.3,
+};
+const lapHistory=[];
+let lapSumSq=0, lapPeak=0, lapN=0, prevSimT=0;
+
+function updateLapLog(){
+  const el=document.getElementById('lap-log');
+  if(!el) return;
+  if(lapHistory.length===0){el.textContent='—';return;}
+  el.innerHTML=lapHistory.slice(0,5).map((l,i)=>`
+    <div style="display:flex;gap:8px;padding:1px 0;${i===0?'color:#1c2630;font-weight:600':''}">
+      <span style="min-width:22px">#${l.lap}</span>
+      <span>RMS <b>${l.rms.toFixed(3)}</b> m</span>
+      <span>pk <b>${l.peak.toFixed(3)}</b> m</span>
+    </div>`).join('');
+}
+let graphPaused=false;
+let pausedAtSample=0;
+let viewEnd=0;
+const gustMarkers=[];
+
+const AXES_SERIES = [
+  { key:'ex',  buf:histEx,  color:'#e05c6b', dash:[],    label:'ex' },
+  { key:'ey',  buf:histEy,  color:'#4caf7d', dash:[],    label:'ey' },
+  { key:'ez',  buf:histEz,  color:'#4a9eff', dash:[],    label:'ez' },
+  { key:'phi', buf:histPhi, color:'#e05c6b', dash:[3,4], label:'φ' },
+  { key:'th',  buf:histTh,  color:'#4caf7d', dash:[3,4], label:'θ' },
+  { key:'psi', buf:histPsi, color:'#4a9eff', dash:[3,4], label:'ψ' },
+];
+const MAG_SERIES    = [{ key:'emag', buf:histEm, color:'#cdd6f4', dash:[], label:'|e|' }];
+const THRUST_SERIES = [{ key:'T',    buf:histT,  color:'#ff9f43', dash:[], label:'T'   }];
+
+const seriesVisible = {};
+[...AXES_SERIES, ...MAG_SERIES, ...THRUST_SERIES].forEach(s => { seriesVisible[s.key] = true; });
+
+function buildLegend(containerId, series) {
+  const el = document.getElementById(containerId);
+  series.forEach(s => {
+    const item    = document.createElement('div');
+    item.className = 'leg-item on';
+    const swatch  = document.createElement('div');
+    swatch.className = 'leg-swatch';
+    if (s.dash && s.dash.length) {
+      swatch.style.border      = `1.5px dashed ${s.color}`;
+      swatch.style.background  = 'transparent';
+    } else {
+      swatch.style.background  = s.color;
+    }
+    const lbl = document.createElement('span');
+    lbl.textContent = s.label; lbl.style.color = s.color;
+    item.append(swatch, lbl);
+    item.addEventListener('click', () => {
+      seriesVisible[s.key] = !seriesVisible[s.key];
+      item.classList.toggle('on', seriesVisible[s.key]);
+    });
+    el.appendChild(item);
+  });
+}
+buildLegend('leg-axes',   AXES_SERIES);
+buildLegend('leg-mag',    MAG_SERIES);
+buildLegend('leg-thrust', THRUST_SERIES);
+
+const DPR=Math.min(devicePixelRatio||1,2), T_MAX=.60, T_HOVER=.294;
+const cvAxes=document.getElementById('cv-axes'),
+      cvMag =document.getElementById('cv-mag'),
+      cvThrust=document.getElementById('cv-thrust');
+let ctxAxes,ctxMag,ctxThrust,GW=0;
+
+function sizeCanvases(){
+  [[cvAxes,'ctxAxes'],[cvMag,'ctxMag'],[cvThrust,'ctxThrust']].forEach(([cv,key])=>{
+    const r=cv.getBoundingClientRect();
+    if(r.width<1||r.height<1) return;
+    cv.width =Math.round(r.width *DPR);
+    cv.height=Math.round(r.height*DPR);
+    const ctx=cv.getContext('2d');
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    if(key==='ctxAxes'){  ctxAxes  =ctx; GW=Math.round(r.width); }
+    else if(key==='ctxMag')    ctxMag   =ctx;
+    else                       ctxThrust=ctx;
+  });
+}
+requestAnimationFrame(sizeCanvases);
+setTimeout(sizeCanvases, 200);
+setTimeout(sizeCanvases, 600);
+window.addEventListener('resize',()=>{resizeScene();sizeCanvases();});
+if(typeof ResizeObserver!=='undefined'){
+  const ro=new ResizeObserver(sizeCanvases);
+  [cvAxes,cvMag,cvThrust].forEach(cv=>ro.observe(cv));
+}
+
+[cvAxes, cvMag, cvThrust].forEach(cv => {
+  cv.style.cursor = 'default';
+  cv.addEventListener('click', () => {
+    graphPaused = !graphPaused;
+    if (graphPaused) { pausedAtSample = totalSamples; viewEnd = 0; }
+    else             { viewEnd = 0; }
+  });
+});
+
+const ML=36, MB=20;
+const DT_PER_FRAME=0.015;
+
+function fmtTick(v){
+  if(v===0) return '0';
+  const a=Math.abs(v);
+  return a<0.1 ? v.toFixed(3) : v.toFixed(2);
+}
+
+function drawGraph(ctx,W,H,series,yMin,yMax,hlines,unit=''){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#e0e4e8'; ctx.fillRect(0,0,W,H);
+  const range=yMax-yMin;
+  const MT=10, DW=W-ML, DH=H-MB-MT;
+  function py(frac){ return MT+DH*(1-frac); }
+
+  const liveOff   = graphPaused ? (totalSamples - pausedAtSample) : 0;
+  const vOff      = Math.max(0, Math.min(liveOff + viewEnd, histCount - 2));
+  const drawCount = Math.min(histCount - vOff, GRAPH_LEN);
+
+  ctx.font='7px monospace'; ctx.textAlign='right';
+  for(let i=0;i<=4;i++){
+    const frac=i/4, val=yMin+frac*range, yp=py(frac);
+    ctx.strokeStyle='rgba(0,0,0,0.07)'; ctx.lineWidth=0.5;
+    ctx.beginPath(); ctx.moveTo(ML,yp); ctx.lineTo(W,yp); ctx.stroke();
+    ctx.strokeStyle='rgba(0,0,0,0.12)';
+    ctx.beginPath(); ctx.moveTo(ML-3,yp); ctx.lineTo(ML,yp); ctx.stroke();
+    ctx.fillStyle='rgba(30,40,55,0.45)';
+    ctx.fillText(fmtTick(val), ML-5, yp+3);
+  }
+  ctx.textAlign='left';
+  if(unit){ ctx.fillStyle='rgba(30,40,55,0.35)'; ctx.fillText(unit,ML+2,MT+10); }
+
+  ctx.strokeStyle='rgba(0,0,0,0.12)'; ctx.lineWidth=0.5;
+  ctx.beginPath(); ctx.moveTo(ML,MT);    ctx.lineTo(ML,MT+DH); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(ML,MT+DH); ctx.lineTo(W, MT+DH); ctx.stroke();
+
+  const timeWindow=Math.max(drawCount,1)*DT_PER_FRAME;
+  ctx.font='7px monospace'; ctx.textAlign='center';
+  ctx.fillStyle='rgba(30,40,55,0.38)';
+  for(let i=0;i<=4;i++){
+    const frac=i/4, xp=ML+frac*DW;
+    const lbl=i===4?'now':`${(-(1-frac)*timeWindow).toFixed(0)}s`;
+    ctx.fillText(lbl, xp, H-3);
+    ctx.strokeStyle='rgba(0,0,0,0.1)'; ctx.lineWidth=0.5;
+    ctx.beginPath(); ctx.moveTo(xp,MT+DH); ctx.lineTo(xp,MT+DH+3); ctx.stroke();
+  }
+  ctx.textAlign='left';
+
+  if(hlines)hlines.forEach(({val,color,dash,label})=>{
+    if(val<yMin||val>yMax)return;
+    const yp=MT+DH*(1-(val-yMin)/range);
+    ctx.strokeStyle=color; ctx.lineWidth=1; ctx.setLineDash(dash||[]);
+    ctx.beginPath(); ctx.moveTo(ML,yp); ctx.lineTo(W,yp); ctx.stroke();
+    ctx.setLineDash([]);
+    if(label){ctx.fillStyle=color;ctx.font='7px monospace';ctx.fillText(label,W-24,yp-3);}
+  });
+
+  if(yMin<0&&yMax>0){
+    const zy=MT+DH*yMax/range;
+    ctx.strokeStyle='rgba(0,0,0,0.15)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(ML,zy); ctx.lineTo(W,zy); ctx.stroke();
+  }
+
+  if(drawCount>=2){
+    series.forEach(({buf,color,dash})=>{
+      ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.lineJoin='round';
+      ctx.setLineDash(dash||[]);
+      ctx.beginPath();
+      for(let i=0;i<drawCount;i++){
+        const idx=(histHead-vOff-drawCount+i+GRAPH_LEN*10)%GRAPH_LEN;
+        const xp=ML+(i/(drawCount-1))*DW;
+        const yp=MT+DH*(1-(Math.max(yMin,Math.min(yMax,buf[idx]))-yMin)/range);
+        i===0?ctx.moveTo(xp,yp):ctx.lineTo(xp,yp);
+      }
+      ctx.stroke(); ctx.setLineDash([]);
+    });
+
+    const vStart=totalSamples-vOff-drawCount, vEnd_=totalSamples-vOff;
+    ctx.setLineDash([3,3]); ctx.lineWidth=1;
+    gustMarkers.forEach(gs=>{
+      if(gs<=vStart||gs>vEnd_) return;
+      const xp=ML+((gs-vStart)/drawCount)*DW;
+      ctx.strokeStyle='rgba(255,107,122,0.5)';
+      ctx.beginPath(); ctx.moveTo(xp,MT); ctx.lineTo(xp,MT+DH-2); ctx.stroke();
+      ctx.fillStyle='rgba(255,107,122,0.65)';
+      ctx.font='7px monospace'; ctx.fillText('G',xp+2,MT+9);
+    });
+    ctx.setLineDash([]);
+  }
+
+  if(graphPaused){
+    ctx.fillStyle='rgba(120,90,0,0.55)'; ctx.font='9px monospace';
+    ctx.textAlign='right'; ctx.fillText('⏸ paused',W-4,MT+10); ctx.textAlign='left';
+  }
+}
+
+let rotorAngle=0;
+
+const _vc = (function(){
+  const vc = document.getElementById('view-cube');
+  const vcR = new THREE.WebGLRenderer({ canvas: vc, alpha: true, antialias: true });
+  vcR.setSize(80, 80);
+  vcR.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  const vcScene = new THREE.Scene();
+  const vcCam = new THREE.OrthographicCamera(-1.6, 1.6, 1.6, -1.6, 0.1, 10);
+  vcCam.position.set(0, 0, 5); vcCam.lookAt(0, 0, 0);
+  vcScene.add(new THREE.AmbientLight(0xffffff, 0.85));
+  const vcSun = new THREE.DirectionalLight(0xffffff, 0.55);
+  vcSun.position.set(2, 3, 4); vcScene.add(vcSun);
+
+  function faceTex(label, bg, fg) {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const x = c.getContext('2d');
+    x.fillStyle = bg; x.fillRect(0,0,64,64);
+    x.strokeStyle = 'rgba(0,0,0,0.18)'; x.lineWidth = 2;
+    x.strokeRect(1,1,62,62);
+    x.fillStyle = fg || '#2a3440';
+    x.font = 'bold 17px Inter,system-ui,sans-serif';
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(label, 32, 32);
+    return new THREE.CanvasTexture(c);
+  }
+  const mats = [
+    new THREE.MeshLambertMaterial({ map: faceTex('R',   '#e8eef4') }),
+    new THREE.MeshLambertMaterial({ map: faceTex('L',   '#e8eef4') }),
+    new THREE.MeshLambertMaterial({ map: faceTex('TOP', '#c8ddf2') }),
+    new THREE.MeshLambertMaterial({ map: faceTex('BTM', '#dde2e8') }),
+    new THREE.MeshLambertMaterial({ map: faceTex('F',   '#edf2f7') }),
+    new THREE.MeshLambertMaterial({ map: faceTex('BK',  '#edf2f7') }),
+  ];
+  const vcCube = new THREE.Mesh(new THREE.BoxGeometry(2,2,2), mats);
+  vcScene.add(vcCube);
+
+  const SNAPS = [
+    { p:[16,2,0],   t:[0,2,0], u:[0,1,0]  },
+    { p:[-16,2,0],  t:[0,2,0], u:[0,1,0]  },
+    { p:[0,18,0.1], t:[0,2,0], u:[0,0,-1] },
+    { p:[0,-14,0.1],t:[0,2,0], u:[0,0, 1] },
+    { p:[0,2,16],   t:[0,2,0], u:[0,1,0]  },
+    { p:[0,2,-16],  t:[0,2,0], u:[0,1,0]  },
+  ];
+  const HOME = { p:[6,6,9], t:[0,2,0], u:[0,1,0] };
+
+  let snapAnim = null;
+  function snapTo(s) {
+    const fp = camera.position.clone(), ft = controls.target.clone();
+    const tp = new THREE.Vector3(...s.p), tt = new THREE.Vector3(...s.t);
+    const tu = new THREE.Vector3(...s.u);
+    const dur = 480, t0 = performance.now();
+    snapAnim = now => {
+      const a = Math.min((now - t0) / dur, 1);
+      const e = a < 0.5 ? 2*a*a : -1+(4-2*a)*a;
+      camera.position.lerpVectors(fp, tp, e);
+      controls.target.lerpVectors(ft, tt, e);
+      camera.up.lerp(tu, e);
+      controls.update();
+      return a < 1;
+    };
+  }
+
+  const vcRay = new THREE.Raycaster();
+  vc.addEventListener('click', e => {
+    const r = vc.getBoundingClientRect();
+    const nx = ((e.clientX - r.left) / r.width)  * 2 - 1;
+    const ny =-((e.clientY - r.top)  / r.height) * 2 + 1;
+    vcRay.setFromCamera({ x: nx, y: ny }, vcCam);
+    const hits = vcRay.intersectObject(vcCube);
+    if (hits.length) snapTo(SNAPS[hits[0].face.materialIndex]);
+  });
+  document.getElementById('view-home').addEventListener('click', () => snapTo(HOME));
+
+  return {
+    update(now) {
+      if (snapAnim && !snapAnim(now)) snapAnim = null;
+      vcCube.quaternion.copy(camera.quaternion).invert();
+      vcR.render(vcScene, vcCam);
+    }
+  };
+})();
+
+function animate(){
+  requestAnimationFrame(animate);
+
+  if(sim){
+    const p=s3(sim.x,sim.y,sim.z), sp=s3(sim.sp_x,sim.sp_y,sim.sp_z);
+
+    drone.position.copy(p);
+    drone.rotation.x= sim.phi; drone.rotation.y=-sim.psi; drone.rotation.z=-sim.th;
+    shadowDisc.position.set(p.x,.002,p.z);
+    spMesh.position.copy(sp);
+    const pa=poleGeo.attributes.position;
+    pa.setXYZ(0,sp.x,.002,sp.z); pa.setXYZ(1,sp.x,sp.y,sp.z); pa.needsUpdate=true;
+
+    rotorAngle+=(sim.T/T_MAX)*.28;
+    rotors.forEach(({mesh,dir})=>{mesh.rotation.y=rotorAngle*dir;});
+
+    const vw = s3(sim.vwx, sim.vwy, sim.vwz);
+    const vwMag = vw.length();
+    if (vwMag > 0.05) {
+      windArrow.position.copy(p);
+      windArrow.setDirection(vw.clone().normalize());
+      windArrow.setLength(Math.min(vwMag * 0.22, 2.5), 0.22, 0.11);
+      const wa = Math.min(vwMag / 8, 1);
+      windArrow.line.material.opacity = 0.3 + wa * 0.6;
+      windArrow.cone.material.opacity = 0.3 + wa * 0.6;
+      windArrow.visible = true;
+    } else {
+      windArrow.visible = false;
+    }
+
+    const phi=sim.phi, th=sim.th, ps=sim.psi;
+    const cp=Math.cos(phi),sph=Math.sin(phi),ct=Math.cos(th),st=Math.sin(th),cy=Math.cos(ps),sy=Math.sin(ps);
+    const tsx=cy*st*cp+sy*sph, tsy=sy*st*cp-cy*sph, tsz=ct*cp;
+    const thrustDir=new THREE.Vector3(tsx,tsz,-tsy);
+
+    thrustArrow.position.copy(p);
+    thrustArrow.setDirection(thrustDir);
+    thrustArrow.setLength(Math.max(sim.T / T_MAX * 2.0, 0.1), 0.22, 0.11);
+    const ta = 0.3 + (sim.T / T_MAX) * 0.65;
+    thrustArrow.line.material.opacity = ta;
+    thrustArrow.cone.material.opacity = ta;
+    thrustArrow.visible = true;
+
+    const T = sim.T;
+    document.getElementById('vhwx').textContent = sim.vwx.toFixed(2);
+    document.getElementById('vhwy').textContent = sim.vwy.toFixed(2);
+    document.getElementById('vhwz').textContent = sim.vwz.toFixed(2);
+    document.getElementById('vhtx').textContent = (tsx * T).toFixed(3);
+    document.getElementById('vhty').textContent = (tsy * T).toFixed(3);
+    document.getElementById('vhtz').textContent = (tsz * T).toFixed(3);
+
+    trailPts.push(p.clone());
+    if(trailPts.length>1){trailGeo.setFromPoints(trailPts);trailLine.computeLineDistances();}
+
+    document.getElementById('hx').textContent    =` ${sim.x.toFixed(3)}`;
+    document.getElementById('hy').textContent    =` ${sim.y.toFixed(3)}`;
+    document.getElementById('hz').textContent    =` ${sim.z.toFixed(3)}`;
+    document.getElementById('hemag').textContent =` ${sim.emag.toFixed(3)}`;
+    document.getElementById('hT').textContent    =` ${sim.T.toFixed(3)}`;
+    document.getElementById('ht').textContent    =` ${sim.t.toFixed(1)}`;
+
+    histEx[histHead]=sim.ex; histEy[histHead]=sim.ey; histEz[histHead]=sim.ez;
+    histEm[histHead]=sim.emag; histT[histHead]=sim.T;
+    histPhi[histHead]=sim.phi; histTh[histHead]=sim.th; histPsi[histHead]=sim.psi;
+    histHead=(histHead+1)%GRAPH_LEN; histCount=Math.min(histCount+1,GRAPH_LEN);
+    totalSamples++;
+
+    const aPosMax=Math.max(Math.abs(sim.ex),Math.abs(sim.ey),Math.abs(sim.ez));
+    const aAngMax=Math.max(Math.abs(sim.phi),Math.abs(sim.th),Math.abs(sim.psi));
+    yMaxAxes=Math.max(yMaxAxes*.999,aPosMax*1.15,aAngMax*1.15,.05);
+    yMaxMag =Math.max(yMaxMag*.999,sim.emag*1.15,.04);
+    peakEmag=Math.max(peakEmag,sim.emag);
+
+    let sumSq=0;
+    for(let i=0;i<histCount;i++){
+      const idx=(histHead-histCount+i+GRAPH_LEN)%GRAPH_LEN;
+      sumSq+=histEm[idx]**2;
+    }
+    const rms=Math.sqrt(sumSq/Math.max(histCount,1));
+    document.getElementById('m-t').textContent    =sim.t.toFixed(1);
+    document.getElementById('m-rms').textContent  =rms.toFixed(3);
+    document.getElementById('m-peak').textContent =peakEmag.toFixed(3);
+    document.getElementById('m-emag').textContent =sim.emag.toFixed(3);
+    document.getElementById('m-T').textContent    =sim.T.toFixed(3);
+
+    lapSumSq += sim.emag**2; lapPeak=Math.max(lapPeak,sim.emag); lapN++;
+    const lapPeriod=LAP_PERIODS[sim.path]||null;
+    if(lapPeriod && sim.t>1 && Math.floor(sim.t/lapPeriod)>Math.floor(prevSimT/lapPeriod)){
+      lapHistory.unshift({lap:lapHistory.length+1,
+        rms:Math.sqrt(lapSumSq/Math.max(lapN,1)), peak:lapPeak});
+      if(lapHistory.length>5) lapHistory.pop();
+      lapSumSq=0; lapPeak=0; lapN=0;
+      updateLapLog();
+    }
+    prevSimT=sim.t;
+
+    if(GW>0){
+      const GHa=Math.round(cvAxes.height/DPR);
+      const GHm=Math.round(cvMag.height/DPR);
+      const GHt=Math.round(cvThrust.height/DPR);
+
+      drawGraph(ctxAxes,GW,GHa,
+        AXES_SERIES.filter(s=>seriesVisible[s.key]),
+        -yMaxAxes,yMaxAxes,null,'m/rad');
+      document.getElementById('lbl-axes').textContent=`±${yMaxAxes.toFixed(2)}`;
+
+      drawGraph(ctxMag,GW,GHm,
+        MAG_SERIES.filter(s=>seriesVisible[s.key]),
+        0,yMaxMag,
+        [{val:.05,color:'rgba(45,198,83,0.5)',dash:[4,4],label:'0.05'}],'m');
+      document.getElementById('lbl-mag').textContent=`${sim.emag.toFixed(3)} m`;
+
+      drawGraph(ctxThrust,GW,GHt,
+        THRUST_SERIES.filter(s=>seriesVisible[s.key]),
+        0,T_MAX*1.05,
+        [{val:T_MAX,  color:'rgba(255,77,109,0.5)',dash:[4,4],label:'max'},
+         {val:T_HOVER,color:'rgba(255,255,255,0.12)',dash:[2,6]}],'N');
+      document.getElementById('lbl-thrust').textContent=`${sim.T.toFixed(3)} N`;
+    }
+  }
+
+  if(sim){
+    const tp = s3(sim.x, sim.y, sim.z);
+    controls.target.x += (tp.x - controls.target.x) * 0.015;
+    controls.target.y += (tp.y - controls.target.y) * 0.015;
+    controls.target.z += (tp.z - controls.target.z) * 0.015;
+  }
+  controls.update();
+  _vc.update(performance.now());
+  renderer.render(scene,camera);
+}
+animate();
+
+function sendWind(speed, dir, turb) {
+  send({ cmd:'set_wind', V_mean:+speed, wind_dir:+dir, sigma_w:+turb });
+}
+
+function resetSim() {
+  trailPts.length=0; histHead=0; histCount=0; totalSamples=0;
+  yMaxAxes=.1; yMaxMag=.1; peakEmag=0;
+  send({ cmd:'reset' });
+  if(simPaused) {
+    setPlayState(false);
+  }
+  gustMarkers.length = 0;
+  lapHistory.length=0; lapSumSq=0; lapPeak=0; lapN=0; prevSimT=0; updateLapLog();
+  graphPaused = false; viewEnd = 0; pausedAtSample = 0;
+  [cvAxes,cvMag,cvThrust].forEach(cv=>{ cv.style.cursor='crosshair'; });
+  ['s-cont-gust','t-cont-gust'].forEach(id=>{
+    document.getElementById(id).checked=false;
+  });
+  setContGust(false);
+}
+
+function evalPath(expr, t) {
+  try {
+    return new Function('t','sin','cos','tan','sqrt','abs','exp','log','pi',
+      `return (${expr});`)(t,
+      Math.sin,Math.cos,Math.tan,Math.sqrt,Math.abs,Math.exp,Math.log,Math.PI);
+  } catch(e) { return NaN; }
+}
+
+function applyCustomPath() {
+  const exX = document.getElementById('cx-expr').value.trim();
+  const exY = document.getElementById('cy-expr').value.trim();
+  const exZ = document.getElementById('cz-expr').value.trim();
+  const T   = Math.max(parseFloat(document.getElementById('ct-period').value)||6.28, 0.5);
+  const errEl = document.getElementById('custom-err');
+
+  const tv = T * 0.37;
+  if ([exX,exY,exZ].some(e => !isFinite(evalPath(e, tv)))) {
+    errEl.textContent = 'Expression error — check syntax'; errEl.style.display='block'; return;
+  }
+  errEl.style.display = 'none';
+
+  const N=300, pts=[];
+  for(let i=0;i<=N;i++){
+    const t=(i/N)*T;
+    pts.push(s3(evalPath(exX,t), evalPath(exY,t), evalPath(exZ,t)));
+  }
+  const p0=pts[0], pLast=pts[pts.length-1];
+  const closed = p0.distanceTo(pLast) < 0.15;
+  if(pathObj){scene.remove(pathObj);pathObj.geometry.dispose();pathObj=null;}
+  const curve=new THREE.CatmullRomCurve3(pts,closed,'catmullrom',.1);
+  const geo=new THREE.TubeGeometry(curve,closed?300:N*2,.024,8,closed);
+  pathObj=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:0x4488cc,transparent:true,opacity:.35}));
+  scene.add(pathObj);
+
+  trailPts.length=0; totalSamples=0; pausedAtSample=0;
+  lapHistory.length=0; lapSumSq=0; lapPeak=0; lapN=0; prevSimT=0; updateLapLog();
+  LAP_PERIODS['Custom'] = T;
+
+  const NS=400, times=[], xs=[], ys=[], zs=[];
+  for(let i=0;i<=NS;i++){
+    const t=(i/NS)*T;
+    times.push(t); xs.push(evalPath(exX,t)); ys.push(evalPath(exY,t)); zs.push(evalPath(exZ,t));
+  }
+  send({cmd:'set_custom_path', times, xs, ys, zs});
+}
+
+document.getElementById('custom-apply').addEventListener('click', applyCustomPath);
+['cx-expr','cy-expr','cz-expr','ct-period'].forEach(id=>{
+  document.getElementById(id).addEventListener('keydown', e=>{if(e.key==='Enter') applyCustomPath();});
+});
+
+function changePath(key){
+  document.getElementById('s-path').value=key;
+  document.getElementById('t-path').value=key;
+  document.getElementById('custom-panel').style.display = key==='Custom' ? 'block' : 'none';
+  if(key==='Custom') return;
+  totalSamples=0; pausedAtSample=0;
+  buildPath(key); trailPts.length=0;
+  lapHistory.length=0; lapSumSq=0; lapPeak=0; lapN=0; prevSimT=0; updateLapLog();
+  send({cmd:'set_path',path:key});
+}
+document.getElementById('s-path').addEventListener('change', e=>changePath(e.target.value));
+document.getElementById('s-wind-speed').addEventListener('input', e=>{
+  document.getElementById('s-lbl-ws').textContent=`${(+e.target.value).toFixed(1)} m/s`;
+  sendWind(e.target.value,
+           document.getElementById('s-wind-dir').value,
+           document.getElementById('s-turbulence').value);
+});
+document.getElementById('s-wind-dir').addEventListener('input', e=>{
+  document.getElementById('s-lbl-wd').textContent=`${e.target.value}°`;
+  sendWind(document.getElementById('s-wind-speed').value, e.target.value,
+           document.getElementById('s-turbulence').value);
+});
+document.getElementById('s-turbulence').addEventListener('input', e=>{
+  document.getElementById('s-lbl-tu').textContent=(+e.target.value).toFixed(1);
+  sendWind(document.getElementById('s-wind-speed').value,
+           document.getElementById('s-wind-dir').value, e.target.value);
+});
+let gustInterval = 2200;
+let gustTimer = null;
+function setContGust(on) {
+  clearInterval(gustTimer); gustTimer = null;
+  if (on) { fireGust(); gustTimer = setInterval(fireGust, gustInterval); }
+}
+function setGustPeriod(secs) {
+  if (!isFinite(secs)) secs = 2.2;
+  secs = Math.min(30, Math.max(1.5, secs));
+  gustInterval = secs * 1000;
+  ['s-gust-period','t-gust-period'].forEach(id => {
+    document.getElementById(id).value = secs;
+  });
+  if (gustTimer) { clearInterval(gustTimer); gustTimer = setInterval(fireGust, gustInterval); }
+}
+document.getElementById('s-cont-gust').addEventListener('change', e => {
+  document.getElementById('t-cont-gust').checked = e.target.checked;
+  setContGust(e.target.checked);
+});
+document.getElementById('t-cont-gust').addEventListener('change', e => {
+  document.getElementById('s-cont-gust').checked = e.target.checked;
+  setContGust(e.target.checked);
+});
+document.getElementById('s-gust-period').addEventListener('change', e => setGustPeriod(parseFloat(e.target.value)));
+document.getElementById('t-gust-period').addEventListener('change', e => setGustPeriod(parseFloat(e.target.value)));
+
+document.getElementById('s-reset').addEventListener('click', resetSim);
+function fireGust() { send({cmd:'gust'}); gustMarkers.push(totalSamples); }
+document.getElementById('s-gust').addEventListener('click', fireGust);
+
+document.getElementById('t-path').addEventListener('change', e=>changePath(e.target.value));
+document.getElementById('t-wind-speed').addEventListener('input', e=>{
+  document.getElementById('t-lbl-ws').textContent=`${(+e.target.value).toFixed(1)} m/s`;
+  sendWind(e.target.value,
+           document.getElementById('t-wind-dir').value,
+           document.getElementById('t-turbulence').value);
+});
+document.getElementById('t-wind-dir').addEventListener('input', e=>{
+  document.getElementById('t-lbl-wd').textContent=`${e.target.value}°`;
+  sendWind(document.getElementById('t-wind-speed').value, e.target.value,
+           document.getElementById('t-turbulence').value);
+});
+document.getElementById('t-turbulence').addEventListener('input', e=>{
+  document.getElementById('t-lbl-tu').textContent=(+e.target.value).toFixed(1);
+  sendWind(document.getElementById('t-wind-speed').value,
+           document.getElementById('t-wind-dir').value, e.target.value);
+});
+document.getElementById('t-reset').addEventListener('click', resetSim);
+document.getElementById('t-gust').addEventListener('click', fireGust);
+
+[['hdr-metrics','body-metrics'],['hdr-laplog','body-laplog']].forEach(([hid,bid])=>{
+  document.getElementById(hid).addEventListener('click',()=>{
+    document.getElementById(hid).classList.toggle('collapsed');
+    document.getElementById(bid).classList.toggle('collapsed');
+  });
+});
+
+function resetGainsTo(set) {
+  Object.assign(gains, set);
+  initSliders();
+  send({ cmd:'set_gains', ...gains });
+}
+document.getElementById('reset-tuned-btn').addEventListener('click', () => resetGainsTo(TUNED_GAINS));
+document.getElementById('reset-analytic-btn').addEventListener('click', () => resetGainsTo(ANALYTIC_GAINS));
+</script>
+</body>
+</html>
