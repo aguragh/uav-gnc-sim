@@ -83,7 +83,7 @@ resembles an Ornstein-Uhlenbeck process, allowing us to discretize it with the e
 $$y_k = e^{-\alpha}\,y_{k-1} + \sigma\sqrt{1-e^{-2\alpha}}\,\mathcal N(0,1), \qquad \alpha = \frac{V\,dt}{L}$$
 
 Length scales use the MIL-F-8785C's low-altitude form taken from the Cole & 
-Wickenheiser paper (Table 3.1):
+Wickenheiser paper:
 
 $$L_w = z, \qquad L_u = L_v = \frac{z}{(0.177 + 0.000823z)^{1.2}}$$
 
